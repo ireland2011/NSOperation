@@ -145,10 +145,10 @@ static NSString *const kCellIdentify = @"cell identify";
     NSMutableSet *toBeCancelled = [pendingOperations mutableCopy];
     NSMutableSet *toBeStarted = [visibleRows mutableCopy];
     
-    ///> 将 屏幕上显示的cell 减去 已经下载或者过滤的cell, 得到还未下载或滤镜的cell
+    ///> 需要被操作的行 = 可见的 - 挂起的
     [toBeStarted minusSet:pendingOperations];
     
-    ///> 将 正在下载或者滤镜的cell 减去 可见的cell, 得到未在屏幕上正在下载或者滤镜的cell
+    ///> 需要被取消的行 = 挂起的 - 可见的
     [toBeCancelled minusSet:visibleRows];
     
     
