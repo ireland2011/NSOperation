@@ -91,7 +91,7 @@ static NSString *const kCellIdentify = @"cell identify";
         cell.textLabel.text = @"loading";
         
         if (!self.tableView.dragging && !self.tableView.decelerating) {
-            [self startImageDownloadingForRecord:aRecord adIndexPath:indexPath];
+            [self startOperationForPhotoRecord:aRecord adIndexPath:indexPath];
         }
         
         
@@ -138,15 +138,19 @@ static NSString *const kCellIdentify = @"cell identify";
 
 - (void)loadImageForOnscreenCells {
     NSSet *visibleRows = [NSSet setWithArray:[self.tableView indexPathsForVisibleRows]];
+    ///> 正在下载和滤镜的cell
     NSMutableSet *pendingOperations = [NSMutableSet setWithArray:[self.pendingOperations.downloadInProgress allKeys]];
     [pendingOperations addObjectsFromArray:[self.pendingOperations.filtrationsInProgress allKeys]];
     
     NSMutableSet *toBeCancelled = [pendingOperations mutableCopy];
     NSMutableSet *toBeStarted = [visibleRows mutableCopy];
     
+    ///> 将 屏幕上显示的cell 减去 已经下载或者过滤的cell, 得到还未下载或滤镜的cell
     [toBeStarted minusSet:pendingOperations];
     
+    ///> 将 正在下载或者滤镜的cell 减去 可见的cell, 得到未在屏幕上正在下载或者滤镜的cell
     [toBeCancelled minusSet:visibleRows];
+    
     
     for (NSIndexPath *anIndexPath in toBeCancelled) {
         ImageDownloader *pendingDownload = [self.pendingOperations.downloadInProgress objectForKey:anIndexPath];
@@ -162,6 +166,7 @@ static NSString *const kCellIdentify = @"cell identify";
     
     toBeCancelled = nil;
     
+    
     for (NSIndexPath *anIndexPath in toBeStarted) {
         PhotoRecord *recordToProcess = [self.photos objectAtIndex:anIndexPath.row];
         [self startOperationForPhotoRecord:recordToProcess adIndexPath:anIndexPath];
@@ -174,7 +179,8 @@ static NSString *const kCellIdentify = @"cell identify";
 
 
 
-#pragma mark - Filter
+#pragma mark - Download/Filter
+// 开启 图片下载和滤镜操作
 - (void)startOperationForPhotoRecord:(PhotoRecord *)record adIndexPath:(NSIndexPath *)indexPath {
     if (!record.hasImage) {
         [self startImageDownloadingForRecord:record adIndexPath:indexPath];
@@ -185,10 +191,12 @@ static NSString *const kCellIdentify = @"cell identify";
     }
 }
 
-
+// 下载图片
 - (void)startImageDownloadingForRecord:(PhotoRecord *)record adIndexPath:(NSIndexPath *)indexPath {
     
     if (![self.pendingOperations.downloadInProgress.allKeys containsObject:indexPath]) {
+        
+        ///> 创建图片下载器
         ImageDownloader *imageDownloader = [[ImageDownloader alloc] initWithPhotoRecord:record atIndexPath:indexPath delegate:self];
         [self.pendingOperations.downloadInProgress setObject:imageDownloader forKey:indexPath];
         [self.pendingOperations.downloadQueue addOperation:imageDownloader];
@@ -196,11 +204,12 @@ static NSString *const kCellIdentify = @"cell identify";
  
 }
 
-
+// 图片滤镜
 - (void)startImageFiltrationForRecord:(PhotoRecord *)record adIndexPath:(NSIndexPath *)indexPath {
     if (![self.pendingOperations.filtrationsInProgress.allKeys containsObject:indexPath]) {
         ImageFiltration *imageFiltration = [[ImageFiltration alloc] initWithRecord:record adIndexPath:indexPath delegate:self];
         
+        ///> 如果图片正在下载, 则添加依赖. 等图片下载完执行 滤镜操作
         ImageDownloader *dependency = [self.pendingOperations.downloadInProgress objectForKey:indexPath];
         if (dependency) {
             [imageFiltration addDependency:dependency];
@@ -213,14 +222,17 @@ static NSString *const kCellIdentify = @"cell identify";
 
 
 #pragma mark - CustomDelegate
+// 图片下载完成 回调
 - (void)imageDownloaderDidFinish:(ImageDownloader *)downloader {
     NSIndexPath *indexPath = downloader.indexPathInTableView;
-    
+    //> 下载完成后 刷新行
+    //> 从操作缓存中移除下载器
     [self.tableView reloadRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationFade];
     
     [self.pendingOperations.downloadInProgress removeObjectForKey:indexPath];
 }
 
+// 滤镜完成 回调
 - (void)imageFiltrationDidfinish:(ImageFiltration *)filtration {
     NSIndexPath *indexPath = filtration.indexPathInTableView;
     
